@@ -4,6 +4,13 @@ import AppKit
 
 extension CodeBlockHighlighter {
 
+    /// Line-numbered diff: "123 -\tcode" or "123 +\tcode" or "123\tcode" (compiled once)
+    private static let lineNumDiffRx = try? NSRegularExpression(
+        pattern: #"^(\d+)(\s[+-])?\t(.*)$"#, options: .anchorsMatchLines)
+    /// Simple diff: "- code" or "+ code" (compiled once)
+    private static let simpleDiffRx = try? NSRegularExpression(
+        pattern: #"^([+-])\s(.*)$"#, options: .anchorsMatchLines)
+
     /// Highlight a diff code block with red/green backgrounds for removed/added lines,
     /// and line numbers for context. Format: "LINE_NUM -\tcode" or "LINE_NUM +\tcode" or "LINE_NUM\tcode"
     public static func highlightDiffBlock(code: String, font: NSFont) -> NSAttributedString {
@@ -28,13 +35,6 @@ extension CodeBlockHighlighter {
         let addedText = isDark
             ? NSColor(red: 0.7, green: 1.0, blue: 0.7, alpha: 1)      // light green text
             : NSColor(red: 0.0, green: 0.5, blue: 0.0, alpha: 1)
-
-        // Line-numbered diff: "123 -\tcode" or "123 +\tcode" or "123\tcode"
-        let lineNumDiffRx = try? NSRegularExpression(
-            pattern: #"^(\d+)(\s[+-])?\t(.*)$"#, options: .anchorsMatchLines)
-        // Simple diff: "- code" or "+ code"
-        let simpleDiffRx = try? NSRegularExpression(
-            pattern: #"^([+-])\s(.*)$"#, options: .anchorsMatchLines)
 
         let ns = code as NSString
         let r = NSRange(location: 0, length: ns.length)
