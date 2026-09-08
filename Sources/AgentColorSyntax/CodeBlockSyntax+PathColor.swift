@@ -34,11 +34,11 @@ extension CodeBlockHighlighter {
 
         // If path starts with /Users/<name>/ color that prefix dim
         if path.hasPrefix("/Users/") || path.hasPrefix("/var/") {
-            // Find third slash: /Users/toddbruss/
+            // Find third slash: /Users/<name>/ — all offsets in UTF-16 (NSRange units)
             var slashCount = 0
             var homeEnd = 0
-            for (i, ch) in path.enumerated() {
-                if ch == "/" { slashCount += 1 }
+            for (i, unit) in path.utf16.enumerated() where unit == 0x2F {
+                slashCount += 1
                 if slashCount == 3 { homeEnd = i + 1; break }
             }
             if homeEnd == 0 { homeEnd = ns.length }
@@ -47,9 +47,8 @@ extension CodeBlockHighlighter {
             cursor += homeEnd
 
             // Next component is the top-level dir (e.g. Documents, Library)
-            let remaining = String(path.dropFirst(homeEnd))
-            if let slashIdx = remaining.firstIndex(of: "/") {
-                let topLen = remaining.distance(from: remaining.startIndex, to: slashIdx) + 1
+            let topLen = Self.utf16LengthThroughNextSlash(ns, from: homeEnd)
+            if topLen > 0 {
                 let topRange = NSRange(location: cursor, length: topLen)
                 result.addAttribute(.foregroundColor, value: pathTopDir, range: topRange)
                 cursor += topLen
@@ -61,9 +60,8 @@ extension CodeBlockHighlighter {
             cursor += 2
 
             // Next component is the top-level dir
-            let remaining = String(path.dropFirst(2))
-            if let slashIdx = remaining.firstIndex(of: "/") {
-                let topLen = remaining.distance(from: remaining.startIndex, to: slashIdx) + 1
+            let topLen = Self.utf16LengthThroughNextSlash(ns, from: 2)
+            if topLen > 0 {
                 let topRange = NSRange(location: cursor, length: topLen)
                 result.addAttribute(.foregroundColor, value: pathTopDir, range: topRange)
                 cursor += topLen
@@ -72,8 +70,9 @@ extension CodeBlockHighlighter {
 
         // Find the filename (last component after final /)
         let pathEnd = pathRange.location + pathRange.length
-        if let lastSlash = path.lastIndex(of: "/") {
-            let filenameStart = path.distance(from: path.startIndex, to: lastSlash) + 1
+        let lastSlash = ns.range(of: "/", options: .backwards)
+        if lastSlash.location != NSNotFound {
+            let filenameStart = lastSlash.location + 1
             let filenameLen = ns.length - filenameStart
             if filenameLen > 0 {
                 let filenameRange = NSRange(location: pathRange.location + filenameStart, length: filenameLen)
@@ -99,5 +98,12 @@ extension CodeBlockHighlighter {
                 result.addAttributes([.foregroundColor: pathFilename, .font: bold], range: NSRange(location: cursor, length: remainLen))
             }
         }
+    }
+
+    /// UTF-16 length from `start` through (and including) the next "/", or 0 if none.
+    private static func utf16LengthThroughNextSlash(_ ns: NSString, from start: Int) -> Int {
+        guard start < ns.length else { return 0 }
+        let r = ns.range(of: "/", range: NSRange(location: start, length: ns.length - start))
+        return r.location == NSNotFound ? 0 : (r.location - start + 1)
     }
 }

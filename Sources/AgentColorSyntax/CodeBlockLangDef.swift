@@ -14,6 +14,9 @@ public struct LangDef: @unchecked Sendable {
     public let hasAttrs: Bool
     public let hasPreproc: Bool
     public let stringRegex: NSRegularExpression?
+    /// Compiled once per language instead of per highlight call.
+    public let blockCommentRegex: NSRegularExpression?
+    public let lineCommentRegex: NSRegularExpression?
 
     public init(kw: [String] = [], decl: [String] = [], types: [String] = [], selfKw: [String] = [],
          sys: [String] = [], comment: String? = "//", blockStart: String? = "/*", blockEnd: String? = "*/",
@@ -29,5 +32,18 @@ public struct LangDef: @unchecked Sendable {
         self.hasAttrs = attrs
         self.hasPreproc = preproc
         self.stringRegex = try? NSRegularExpression(pattern: strPat)
+        if let blockStart, let blockEnd {
+            let e1 = NSRegularExpression.escapedPattern(for: blockStart)
+            let e2 = NSRegularExpression.escapedPattern(for: blockEnd)
+            self.blockCommentRegex = try? NSRegularExpression(pattern: "\(e1)[\\s\\S]*?\(e2)", options: .dotMatchesLineSeparators)
+        } else {
+            self.blockCommentRegex = nil
+        }
+        if let comment {
+            let esc = NSRegularExpression.escapedPattern(for: comment)
+            self.lineCommentRegex = try? NSRegularExpression(pattern: "\(esc).*$", options: .anchorsMatchLines)
+        } else {
+            self.lineCommentRegex = nil
+        }
     }
 }

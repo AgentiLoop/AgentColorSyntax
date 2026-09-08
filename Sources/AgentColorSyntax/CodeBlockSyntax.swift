@@ -4,6 +4,12 @@ import AppKit
 
 public enum CodeBlockHighlighter: Sendable {
     private static let wordRx: NSRegularExpression? = try? NSRegularExpression(pattern: #"\b(?:[a-zA-Z][a-zA-Z0-9_]*|_[a-zA-Z0-9][a-zA-Z0-9_]*)\b"#)
+    // Compiled once — these used to be rebuilt on every highlight call (and per line for lsDateRx).
+    private static let lsDateRx = try? NSRegularExpression(pattern: #"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+"#)
+    private static let htmlCommentRx = try? NSRegularExpression(pattern: #"<!--[\s\S]*?-->"#, options: .dotMatchesLineSeparators)
+    private static let htmlStringRx = try? NSRegularExpression(pattern: #""[^"]*""#)
+    private static let cssCommentRx = try? NSRegularExpression(pattern: #"/\*[\s\S]*?\*/"#, options: .dotMatchesLineSeparators)
+    private static let cssStringRx = try? NSRegularExpression(pattern: #"'[^']*'|"[^"]*""#)
     private static let funcRx: NSRegularExpression? = try? NSRegularExpression(pattern: #"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?=\()"#)
     private static let propRx: NSRegularExpression? = try? NSRegularExpression(pattern: #"\.([a-zA-Z_][a-zA-Z0-9_]*)"#)
     private static let numRx: NSRegularExpression? = try? NSRegularExpression(pattern: #"\b(?:0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\b"#)
@@ -214,21 +220,14 @@ public enum CodeBlockHighlighter: Sendable {
     }
 
     private static func applyComments(_ result: NSMutableAttributedString, code: String, def: LangDef, range: NSRange, color: NSColor) {
-        if let start = def.blockComStart, let end = def.blockComEnd {
-            let e1 = NSRegularExpression.escapedPattern(for: start)
-            let e2 = NSRegularExpression.escapedPattern(for: end)
-            if let rx = try? NSRegularExpression(pattern: "\(e1)[\\s\\S]*?\(e2)", options: .dotMatchesLineSeparators) {
-                rx.enumerateMatches(in: code, range: range) { m, _, _ in
-                    if let r = m?.range { result.addAttribute(.foregroundColor, value: color, range: r) }
-                }
+        if let rx = def.blockCommentRegex {
+            rx.enumerateMatches(in: code, range: range) { m, _, _ in
+                if let r = m?.range { result.addAttribute(.foregroundColor, value: color, range: r) }
             }
         }
-        if let prefix = def.commentPrefix {
-            let esc = NSRegularExpression.escapedPattern(for: prefix)
-            if let rx = try? NSRegularExpression(pattern: "\(esc).*$", options: .anchorsMatchLines) {
-                rx.enumerateMatches(in: code, range: range) { m, _, _ in
-                    if let r = m?.range { result.addAttribute(.foregroundColor, value: color, range: r) }
-                }
+        if let rx = def.lineCommentRegex {
+            rx.enumerateMatches(in: code, range: range) { m, _, _ in
+                if let r = m?.range { result.addAttribute(.foregroundColor, value: color, range: r) }
             }
         }
     }
@@ -1014,7 +1013,7 @@ public enum CodeBlockHighlighter: Sendable {
                     let perm = String(trimmed.prefix(10))
                     if perm.allSatisfy({ "drwx-lbcpsTt@+. ".contains($0) }) {
                         // Find filename after the date (last component)
-                        guard let dateRx = try? NSRegularExpression(pattern: #"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+"#) else { continue }
+                        guard let dateRx = lsDateRx else { continue }
                         if let dateMatch = dateRx.firstMatch(in: line, range: NSRange(location: 0, length: lineLen)) {
                             let nameStart = dateMatch.range.location + dateMatch.range.length
                             if nameStart < lineLen {
@@ -1056,7 +1055,7 @@ public enum CodeBlockHighlighter: Sendable {
         let colComment = CodeBlockTheme.comment
 
         // Highlight comments first (<!-- ... -->)
-        if let commentRx = try? NSRegularExpression(pattern: #"<!--[\s\S]*?-->"#, options: .dotMatchesLineSeparators) {
+        if let commentRx = htmlCommentRx {
             commentRx.enumerateMatches(in: code, range: r) { m, _, _ in
                 guard let mr = m?.range else { return }
                 result.addAttribute(.foregroundColor, value: colComment, range: mr)
@@ -1082,7 +1081,6 @@ public enum CodeBlockHighlighter: Sendable {
         }
 
         // Strings (attribute values) - override in tag regions
-        let htmlStringRx = try? NSRegularExpression(pattern: #""[^"]*""#, options: [])
         htmlStringRx?.enumerateMatches(in: code, range: r) { m, _, _ in
             guard let mr = m?.range else { return }
             result.addAttribute(.foregroundColor, value: colString, range: mr)
@@ -1119,7 +1117,7 @@ public enum CodeBlockHighlighter: Sendable {
         let colFunc = CodeBlockTheme.funcCall
 
         // Highlight comments first (/* ... */)
-        if let commentRx = try? NSRegularExpression(pattern: #"/\*[\s\S]*?\*/"#, options: .dotMatchesLineSeparators) {
+        if let commentRx = cssCommentRx {
             commentRx.enumerateMatches(in: code, range: r) { m, _, _ in
                 guard let mr = m?.range else { return }
                 result.addAttribute(.foregroundColor, value: colComment, range: mr)
@@ -1164,7 +1162,6 @@ public enum CodeBlockHighlighter: Sendable {
         }
 
         // Strings
-        let cssStringRx = try? NSRegularExpression(pattern: #"'[^']*'|"[^"]*""#, options: [])
         cssStringRx?.enumerateMatches(in: code, range: r) { m, _, _ in
             guard let mr = m?.range else { return }
             result.addAttribute(.foregroundColor, value: colValue, range: mr)

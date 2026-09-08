@@ -16,5 +16,9 @@ let package = Package(
             name: "AgentColorSyntax",
             path: "Sources/AgentColorSyntax"
         ),
+        .testTarget(
+            name: "AgentColorSyntaxTests",
+            dependencies: ["AgentColorSyntax"]
+        ),
     ]
 )
