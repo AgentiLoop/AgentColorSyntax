@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "AgentColorSyntax",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v14)],
     products: [
         .library(
             name: "AgentColorSyntax",
