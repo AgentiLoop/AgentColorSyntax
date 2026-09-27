@@ -94,6 +94,11 @@ public enum CodeBlockHighlighter: Sendable {
         let effectiveLang = language ?? guessLanguage(from: cleanCode)
         let resolvedLang = effectiveLang.map { aliases[$0.lowercased()] ?? $0.lowercased() }
 
+        // swift test / XCTest output — any language tag, since it's often fenced bare
+        if looksLikeTestOutput(cleanCode) {
+            return highlightTestOutput(code: cleanCode, font: font)
+        }
+
         // Use terminal highlighter for bash/shell output
         if resolvedLang == "bash" && looksLikeTerminalOutput(cleanCode) {
             return highlightTerminalOutput(code: cleanCode, font: font)
@@ -569,6 +574,79 @@ public enum CodeBlockHighlighter: Sendable {
             : NSColor(red: 0.7, green: 0.5, blue: 0.0, alpha: 1)
     }
     private static let termSizeRx: NSRegularExpression? = try? NSRegularExpression(pattern: #"(?<=\s)\d{1,12}(?=\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))"#)
+
+    // MARK: - Test Output (swift-testing / XCTest)
+
+    private static let testMarkers: [String] = ["✔", "✘", "◇", "↳", "Test Suite '", "Test Case '"]
+    private static let testPassRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\b(?:passed|started)\b"#)
+    private static let testFailRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\b(?:failed|recorded an issue|Expectation failed:|error:)"#)
+    private static let testNumRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\b\d+(?:\.\d+)?\b"#)
+    private static let testNameRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?:Test|Suite|Case) ["']([^"'\n]*)["']"#)
+    private static let testLocRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\S+\.swift:\d+(?::\d+)?"#)
+
+    /// True when most non-empty lines start with a swift-testing / XCTest marker.
+    static func looksLikeTestOutput(_ code: String) -> Bool {
+        let lines = code.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        guard lines.count >= 2 else { return false }
+        let hits = lines.filter { l in testMarkers.contains(where: { l.hasPrefix($0) }) }.count
+        return hits * 2 >= lines.count
+    }
+
+    /// ✔ green, ✘ red, ◇/↳ dim; test names stay plain text; counts/durations yellow.
+    static func highlightTestOutput(code: String, font: NSFont) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: code, attributes: [
+            .font: font, .foregroundColor: CodeBlockTheme.text
+        ])
+        let ns = code as NSString
+        let r = NSRange(location: 0, length: ns.length)
+        let bold = NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .bold)
+        let pass = termExec, fail = termError, dim = termDate, num = termSize
+
+        testNumRx?.enumerateMatches(in: code, range: r) { m, _, _ in
+            guard let mr = m?.range else { return }
+            result.addAttribute(.foregroundColor, value: num, range: mr)
+        }
+        testLocRx?.enumerateMatches(in: code, range: r) { m, _, _ in
+            guard let mr = m?.range else { return }
+            result.addAttribute(.foregroundColor, value: termPath, range: mr)
+        }
+        testPassRx?.enumerateMatches(in: code, range: r) { m, _, _ in
+            guard let mr = m?.range else { return }
+            result.addAttribute(.foregroundColor, value: pass, range: mr)
+        }
+        testFailRx?.enumerateMatches(in: code, range: r) { m, _, _ in
+            guard let mr = m?.range else { return }
+            result.addAttributes([.foregroundColor: fail, .font: bold], range: mr)
+        }
+        // Test names: plain text, bold — undo any number/keyword coloring inside them.
+        testNameRx?.enumerateMatches(in: code, range: r) { m, _, _ in
+            guard let mr = m?.range(at: 1) else { return }
+            result.addAttributes([.foregroundColor: CodeBlockTheme.text, .font: bold], range: mr)
+        }
+        // Leading markers, per line
+        var lineStart = 0
+        while lineStart < ns.length {
+            let lr = ns.lineRange(for: NSRange(location: lineStart, length: 0))
+            let line = ns.substring(with: lr)
+            let lead = line.prefix(while: { $0 == " " || $0 == "\t" }).utf16.count
+            let t = line.dropFirst(lead)
+            let markerRange = NSRange(location: lr.location + lead, length: 1)
+            if t.hasPrefix("✔") {
+                result.addAttributes([.foregroundColor: pass, .font: bold], range: markerRange)
+            } else if t.hasPrefix("✘") {
+                result.addAttributes([.foregroundColor: fail, .font: bold], range: markerRange)
+            } else if t.hasPrefix("◇") || t.hasPrefix("↳") {
+                result.addAttribute(.foregroundColor, value: dim, range: NSRange(location: lr.location, length: lr.length))
+            }
+            lineStart = NSMaxRange(lr)
+        }
+        return result
+    }
 
     // MARK: - Git Output Detection & Highlighting
 
