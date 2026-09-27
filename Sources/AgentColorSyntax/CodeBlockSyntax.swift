@@ -783,6 +783,9 @@ public enum CodeBlockHighlighter: Sendable {
 
     private static let actTimestampRx: NSRegularExpression? = try? NSRegularExpression(
         pattern: #"\[\d{2}:\d{2}:\d{2}\]"#)
+    /// Leading "[HH:MM:SS] " — its end is where the message body starts.
+    private static let actLeadTimestampRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"^\s*\[\d{2}:\d{2}:\d{2}\]\s*"#)
     private static let actSectionRx: NSRegularExpression? = try? NSRegularExpression(
         pattern: #"---\s+.+?\s+---"#)
     private static let actLabelRx: NSRegularExpression? = try? NSRegularExpression(
@@ -928,6 +931,33 @@ public enum CodeBlockHighlighter: Sendable {
         actLabelRx?.enumerateMatches(in: line, range: r) { m, _, _ in
             guard let mr = m?.range else { return }
             result.addAttributes([.foregroundColor: cKw, .font: bold], range: mr)
+        }
+
+        // Emoji-tagged body after the timestamp: "[HH:MM:SS] ✅ Completed: …"
+        let bodyStart = actLeadTimestampRx?.firstMatch(in: line, range: r).map { NSMaxRange($0.range) } ?? 0
+        let body = bodyStart < ns.length ? ns.substring(from: bodyStart) : ""
+        let bodyRange = NSRange(location: min(bodyStart, ns.length), length: max(0, ns.length - bodyStart))
+
+        if body.hasPrefix("🔒 Jev:") {
+            // Guard verdicts are high-volume noise → dim the whole body.
+            result.addAttribute(.foregroundColor, value: termDate, range: bodyRange)
+            return result
+        }
+        if body.hasPrefix("👤") {
+            // User prompt → bold, plain color; the user's words aren't errors.
+            result.addAttributes([.foregroundColor: NSColor.labelColor, .font: bold], range: bodyRange)
+            return result
+        }
+        if body.hasPrefix("✅") {
+            // Success summary → green bold label; prose like "Error History" stays uncolored.
+            let label = (body as NSString).range(of: ":")
+            if label.location != NSNotFound, label.location <= 20 {
+                result.addAttributes(
+                    [.foregroundColor: termExec, .font: bold],
+                    range: NSRange(location: bodyStart, length: NSMaxRange(label))
+                )
+            }
+            return result
         }
 
         // Error keywords → red (last, overrides other colors)
