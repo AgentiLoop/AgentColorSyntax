@@ -920,9 +920,56 @@ public enum CodeBlockHighlighter: Sendable {
         return perm.allSatisfy({ "drwx-lbcpsTt@+. ".contains($0) })
     }
 
+    /// `grep -n` / `-A`/`-B`/`-C` output on one file: "443:code" (match) or "444-code" (context).
+    private static let grepNumberedRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"^(\d+)([:-])(\s.*)?$"#)
+    /// `git status -sb` branch line: "## main...origin/main [ahead 2]"
+    private static let gitBranchRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"^## (\S+?)\.\.\.(\S+)(?: \[([^\]]+)\])?$"#)
+
+    /// True for a `git status -sb` branch line. Callers check this before markdown headings.
+    public static func looksLikeGitBranchLine(_ line: String) -> Bool {
+        gitBranchRx?.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) != nil
+    }
+
+    /// git colors: local branch green bold, upstream red, ahead/behind yellow, "##" dim.
+    private static func highlightGitBranch(_ m: NSTextCheckingResult, line: String, font: NSFont) -> NSAttributedString {
+        let bold = NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .bold)
+        let result = NSMutableAttributedString(string: line, attributes: [.font: font, .foregroundColor: termDate])
+        result.addAttributes([.foregroundColor: termExec, .font: bold], range: m.range(at: 1))
+        result.addAttribute(.foregroundColor, value: termError, range: m.range(at: 2))
+        if m.range(at: 3).location != NSNotFound {
+            result.addAttribute(.foregroundColor, value: termSize, range: m.range(at: 3))
+        }
+        return result
+    }
+
+    /// Line number yellow bold for a match (":"), dim for context ("-"); the code is Swift-highlighted.
+    private static func highlightGrepNumbered(_ m: NSTextCheckingResult, line: String, font: NSFont) -> NSAttributedString {
+        let ns = line as NSString
+        let isMatch = ns.substring(with: m.range(at: 2)) == ":"
+        let codeRange = m.range(at: 3)
+        let prefixEnd = codeRange.location == NSNotFound ? ns.length : codeRange.location
+        var attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: isMatch ? termSize : termDate]
+        if isMatch { attrs[.font] = NSFont.monospacedSystemFont(ofSize: font.pointSize, weight: .bold) }
+        let result = NSMutableAttributedString(string: ns.substring(to: prefixEnd), attributes: attrs)
+        if codeRange.location != NSNotFound {
+            result.append(highlight(code: ns.substring(with: codeRange), language: "swift", font: font))
+        }
+        return result
+    }
+
     /// Highlight a single activity log line. Returns nil if the line is not activity-log output.
     public static func highlightActivityLogLine(line: String, font: NSFont) -> NSAttributedString? {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let full = NSRange(location: 0, length: (line as NSString).length)
+
+        if let m = gitBranchRx?.firstMatch(in: line, range: full) {
+            return highlightGitBranch(m, line: line, font: font)
+        }
+        if let m = grepNumberedRx?.firstMatch(in: line, range: full) {
+            return highlightGrepNumbered(m, line: line, font: font)
+        }
 
         // D1F diff output (📎/❌/✅ prefixed lines)
         if looksLikeD1FLine(trimmed) {
@@ -1019,6 +1066,14 @@ public enum CodeBlockHighlighter: Sendable {
         if body.hasPrefix("🔒 Jev:") {
             // Guard verdicts are high-volume noise → dim the whole body.
             result.addAttribute(.foregroundColor, value: termDate, range: bodyRange)
+            return result
+        }
+        if body.hasPrefix("BUILD SUCCEEDED") {
+            result.addAttributes([.foregroundColor: termExec, .font: bold], range: NSRange(location: bodyStart, length: 15))
+            return result
+        }
+        if body.hasPrefix("BUILD FAILED") {
+            result.addAttributes([.foregroundColor: termError, .font: bold], range: bodyRange)
             return result
         }
         if body.hasPrefix("👤") {
