@@ -4,8 +4,8 @@ A Swift package for syntax highlighting code blocks, terminal output, diffs, and
 
 ## Requirements
 
-- macOS 26+
-- Swift 6.2+
+- macOS 14+
+- Swift 6.4+
 - No external dependencies (AppKit only)
 
 ## Installation
@@ -14,7 +14,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(path: "../AgentColorSyntax")
+    .package(url: "https://github.com/AgentiLoop/AgentColorSyntax.git", from: "1.2.11")
 ]
 ```
 
@@ -74,6 +74,14 @@ Theme-aware colors for keywords, strings, numbers, comments, types, function cal
 ### LangDef
 
 Language definition struct with keywords, declaration keywords, types, self keywords, system functions, comment delimiters, and string patterns.
+
+## Part of AgentiLoop Agent!
+
+AgentColorSyntax is one of the open-source building blocks of **[AgentiLoop Agent!](https://github.com/AgentiLoop/Agent)**, the native AI agent for macOS 14.6+ on Apple Silicon and Intel. Agent! codes in Xcode, drives any Mac app, runs shell as you or as root, and works with 23 LLM providers plus on-device Apple Intelligence.
+
+🌐 [agentiloop.ai](https://agentiloop.ai/) · ⬇️ [Download Agent!](https://github.com/AgentiLoop/Agent/releases/latest) · 🍺 `brew install --cask agentiloop-agent` · 💻 CLIs: [Rust](https://github.com/AgentiLoop/AgentiLoopCLI) / [Go](https://github.com/AgentiLoop/AgentiLoopGo)
+
+**More Agent! packages:** [AgentAccess](https://github.com/AgentiLoop/AgentAccess) · [AgentAudit](https://github.com/AgentiLoop/AgentAudit) · [AgentD1F](https://github.com/AgentiLoop/AgentD1F) · [AgentEventBridges](https://github.com/AgentiLoop/AgentEventBridges) · [AgentLLM](https://github.com/AgentiLoop/AgentLLM) · [AgentMCP](https://github.com/AgentiLoop/AgentMCP) · [AgentSwift](https://github.com/AgentiLoop/AgentSwift) · [AgentTerminalNeo](https://github.com/AgentiLoop/AgentTerminalNeo) · [AgentTools](https://github.com/AgentiLoop/AgentTools) · [AgentScripts](https://github.com/AgentiLoop/AgentScripts)
 
 ## License
 
