@@ -86,3 +86,7 @@ AgentColorSyntax is one of the open-source building blocks of **[AgentiLoop Agen
 ## License
 
 MIT
+
+---
+
+Copyright © 2026 AgentiLoop.ai, a Logos InkPen LLC company. All rights reserved.
