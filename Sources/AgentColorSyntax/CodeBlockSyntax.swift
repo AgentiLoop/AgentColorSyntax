@@ -864,6 +864,9 @@ public enum CodeBlockHighlighter: Sendable {
     /// Leading "[HH:MM:SS] " — its end is where the message body starts.
     private static let actLeadTimestampRx: NSRegularExpression? = try? NSRegularExpression(
         pattern: #"^\s*\[\d{2}:\d{2}:\d{2}\]\s*"#)
+    /// Numbers in the "🧾 LLM …" receipt: "2.1s", "23", "1,234".
+    private static let actReceiptNumRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\b\d[\d,]*(?:\.\d+)?s?\b"#)
     private static let actSectionRx: NSRegularExpression? = try? NSRegularExpression(
         pattern: #"---\s+.+?\s+---"#)
     private static let actLabelRx: NSRegularExpression? = try? NSRegularExpression(
@@ -1066,6 +1069,32 @@ public enum CodeBlockHighlighter: Sendable {
         if body.hasPrefix("🔒 Jev:") {
             // Guard verdicts are high-volume noise → dim the whole body.
             result.addAttribute(.foregroundColor, value: termDate, range: bodyRange)
+            return result
+        }
+        if body.hasPrefix("🧾 LLM ") {
+            // "🧾 LLM 2.1s · iter 23 · 2 in / 212 out · stop: tool_use · → git"
+            // Labels/separators gray, "LLM" + stop reason white bold, numbers yellow, next tools green.
+            let b = body as NSString
+            func abs(_ r: NSRange) -> NSRange { NSRange(location: bodyStart + r.location, length: r.length) }
+            result.addAttributes([.foregroundColor: termDate, .font: font], range: bodyRange)
+            result.addAttributes([.foregroundColor: NSColor.labelColor, .font: bold], range: abs(b.range(of: "LLM")))
+            let stop = b.range(of: "stop: ")
+            let arrow = b.range(of: "→ ")
+            let numEnd = stop.location != NSNotFound ? stop.location : b.length
+            actReceiptNumRx?.enumerateMatches(in: body, range: NSRange(location: 0, length: numEnd)) { m, _, _ in
+                guard let mr = m?.range else { return }
+                result.addAttribute(.foregroundColor, value: termSize, range: abs(mr))
+            }
+            if stop.location != NSNotFound {
+                let s = NSMaxRange(stop)
+                let e = b.range(of: " ·", range: NSRange(location: s, length: b.length - s)).location
+                let len = (e == NSNotFound ? b.length : e) - s
+                result.addAttributes([.foregroundColor: NSColor.labelColor, .font: bold], range: abs(NSRange(location: s, length: len)))
+            }
+            if arrow.location != NSNotFound {
+                let s = NSMaxRange(arrow)
+                result.addAttributes([.foregroundColor: termExec, .font: bold], range: abs(NSRange(location: s, length: b.length - s)))
+            }
             return result
         }
         if body.hasPrefix("BUILD SUCCEEDED") {
