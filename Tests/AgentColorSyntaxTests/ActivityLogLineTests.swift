@@ -25,6 +25,14 @@ struct ActivityLogLineTests {
         return s.attribute(.font, at: loc, effectiveRange: nil) as? NSFont
     }
 
+    @Test("D1F lines get a stripe with tab-indented code (D1F emits no space after the emoji)")
+    func d1fTabIndented() {
+        for line in ["\u{274C}\t\trunner.check(x)", "\u{2705}\t\trunner.check(y)", "\u{274C}    let a = 1"] {
+            let s = hl(line)
+            #expect(s.attribute(.backgroundColor, at: 0, effectiveRange: nil) != nil)
+        }
+    }
+
     @Test("Plain log line still reds error keywords")
     func errorKeywordRed() {
         let s = hl("[18:30:10] Claude API Error: boom failed")

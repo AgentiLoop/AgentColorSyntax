@@ -743,8 +743,7 @@ public enum CodeBlockHighlighter: Sendable {
         if let first = trimmed.first, first.isNumber {
             let digits = trimmed.prefix(while: { $0.isNumber })
             let afterDigits = trimmed[digits.endIndex...]
-            if afterDigits.hasPrefix(" "),
-               d1fEmojis.contains(where: { afterDigits.dropFirst().hasPrefix($0) }) {
+            if afterDigits.hasPrefix(" "), hasD1FPrefix(afterDigits.dropFirst()) {
                 lineNumber = String(digits)
                 emojiPart = String(afterDigits.dropFirst()) // drop the space between number and emoji
             } else {
@@ -756,13 +755,9 @@ public enum CodeBlockHighlighter: Sendable {
             emojiPart = trimmed
         }
 
-        // Strip emoji prefix to get the code content for syntax highlighting
-        let codeContent: String
-        if let spaceIdx = emojiPart.firstIndex(of: " "), emojiPart.distance(from: emojiPart.startIndex, to: spaceIdx) <= 2 {
-            codeContent = String(emojiPart[emojiPart.index(after: spaceIdx)...])
-        } else {
-            codeContent = emojiPart
-        }
+        // Strip emoji (+ one space separator, if any) to get the code content for syntax highlighting
+        var codeContent = String(emojiPart.dropFirst())
+        if codeContent.hasPrefix(" ") { codeContent.removeFirst() }
 
         // Apply code syntax highlighting to the content portion
         // guessLanguage often fails on single lines — default to swift for D1F diffs
@@ -801,15 +796,15 @@ public enum CodeBlockHighlighter: Sendable {
 
         // Apply background stripe based on D1F marker (use emojiPart which has number stripped)
         let bg: NSColor
-        if emojiPart.hasPrefix("❌ ") {
+        if emojiPart.hasPrefix("❌") {
             bg = isDark
                 ? NSColor(red: 0.35, green: 0.08, blue: 0.08, alpha: 1.0)
                 : NSColor(red: 0.95, green: 0.80, blue: 0.80, alpha: 1.0)
-        } else if emojiPart.hasPrefix("✅ ") {
+        } else if emojiPart.hasPrefix("✅") {
             bg = isDark
                 ? NSColor(red: 0.08, green: 0.25, blue: 0.08, alpha: 1.0)
                 : NSColor(red: 0.80, green: 0.95, blue: 0.80, alpha: 1.0)
-        } else if emojiPart.hasPrefix("📎 ") {
+        } else if emojiPart.hasPrefix("📎") {
             bg = isDark
                 ? NSColor(red: 0.10, green: 0.12, blue: 0.19, alpha: 1.0)
                 : NSColor(red: 0.87, green: 0.89, blue: 0.95, alpha: 1.0)
@@ -899,19 +894,26 @@ public enum CodeBlockHighlighter: Sendable {
     }
 
     /// Check if a line is D1F diff output (📎/❌/✅/📍/📊 prefixed)
-    private static let d1fEmojis: [String] = ["📎 ", "❌ ", "✅ ", "📍 ", "📊 ", "❓ "]
+    private static let d1fEmojis: [String] = ["📎", "❌", "✅", "📍", "📊", "❓"]
+
+    /// D1F emits "<emoji><line>" with no separator, so tab-indented code gives "❌\tcode".
+    /// Accept a space or tab after the emoji.
+    private static func hasD1FPrefix(_ s: Substring) -> Bool {
+        d1fEmojis.contains { e in
+            guard s.hasPrefix(e) else { return false }
+            let next = s.dropFirst(e.count).first
+            return next == " " || next == "\t"
+        }
+    }
 
     private static func looksLikeD1FLine(_ t: String) -> Bool {
-        // Direct emoji prefix: "❌ code"
-        if d1fEmojis.contains(where: { t.hasPrefix($0) }) { return true }
+        // Direct emoji prefix: "❌ code" / "❌\tcode"
+        if hasD1FPrefix(Substring(t)) { return true }
         // Numbered prefix: "42 ❌ code"
         if let first = t.first, first.isNumber {
             // Strip leading digits and one space
             let rest = t.drop(while: { $0.isNumber })
-            if rest.hasPrefix(" ") {
-                let afterNum = rest.dropFirst() // drop the space
-                if d1fEmojis.contains(where: { afterNum.hasPrefix($0) }) { return true }
-            }
+            if rest.hasPrefix(" "), hasD1FPrefix(rest.dropFirst()) { return true }
         }
         return false
     }
